@@ -1,91 +1,74 @@
 <!DOCTYPE html>
 <html lang="sv">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Secure Chat</title>
 
-<link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="manifest.json">
 
-<title>LibraOS</title>
+  <style>
+    body {
+      font-family: Arial;
+      margin: 0;
+      background: #0f0f0f;
+      color: white;
+    }
 
-<style>
-body{
-  margin:0;
-  font-family:-apple-system,system-ui;
-  background:#0f0f10;
-  color:#fff;
-}
+    #login, #chat {
+      display: none;
+      padding: 20px;
+    }
 
-.tabbar{
-  position:fixed;
-  bottom:0;
-  width:100%;
-  display:flex;
-  background:#1a1a1c;
-}
+    #chatBox {
+      height: 70vh;
+      overflow-y: auto;
+      border: 1px solid #333;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
 
-.tab{
-  flex:1;
-  padding:12px;
-  text-align:center;
-  color:#aaa;
-}
+    input, button {
+      padding: 10px;
+      margin: 5px;
+    }
 
-.tab.active{color:#2d84eb;}
-
-.view{display:none;padding:16px;}
-.view.active{display:block;}
-
-.btn{
-  background:#2d84eb;
-  border:none;
-  padding:10px;
-  color:#fff;
-  border-radius:8px;
-}
-
-.input{
-  width:100%;
-  padding:10px;
-  margin-bottom:10px;
-  background:#1a1a1c;
-  border:1px solid #333;
-  color:#fff;
-}
-</style>
+    .msg {
+      padding: 5px;
+      margin: 5px 0;
+      background: #1c1c1c;
+      border-radius: 5px;
+    }
+  </style>
 </head>
 
 <body>
 
-<!-- CONTACTS -->
-<div id="contacts" class="view active">
-  <h2>Kontakter</h2>
-  <input id="addId" class="input" placeholder="Kontakt-ID">
-  <button class="btn" onclick="sendRequest()">Lägg till</button>
-
-  <div id="contactList"></div>
+<!-- LOGIN -->
+<div id="login">
+  <h2>Login</h2>
+  <input id="username" placeholder="Användarnamn" />
+  <input id="password" type="password" placeholder="Lösenord" />
+  <button onclick="login()">Logga in</button>
 </div>
 
-<!-- CHATS -->
-<div id="chats" class="view">
-  <h2>Chattar</h2>
-  <div id="chatList"></div>
+<!-- CHAT -->
+<div id="chat">
+  <h2>Secure Chat</h2>
+
+  <input id="room" placeholder="Rum namn" />
+  <button onclick="joinRoom()">Gå med</button>
+
+  <div id="chatBox"></div>
+
+  <input id="message" placeholder="Meddelande" />
+  <button onclick="sendMessage()">Skicka</button>
 </div>
 
-<!-- PROFILE -->
-<div id="profile" class="view">
-  <h2>Profil</h2>
-  <div id="myId"></div>
-  <button class="btn" onclick="resetAccount()">Radera konto</button>
-</div>
-
-<!-- NAV -->
-<div class="tabbar">
-  <div class="tab active" onclick="nav('contacts',this)">Kontakter</div>
-  <div class="tab" onclick="nav('chats',this)">Chattar</div>
-  <div class="tab" onclick="nav('profile',this)">Profil</div>
-</div>
-
+<script src="/socket.io/socket.io.js"></script>
+<script src="crypto.js"></script>
+<script src="ui.js"></script>
 <script src="app.js"></script>
+
 </body>
 </html>
