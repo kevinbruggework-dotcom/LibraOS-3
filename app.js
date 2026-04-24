@@ -1,210 +1,94 @@
-const WS_URL = "wss://libraos-1.onrender.com";
+const socket = io();
 
-let ws;
-let me = JSON.parse(localStorage.getItem("me")) || {
-  id: crypto.randomUUID(),
-  contacts: {}
-};
+let currentUser = null;
+let currentRoom = null;
 
-save();
+// ======================
+// LOGIN
+// ======================
+async function login() {
+  const username = document.getElementById("username").value;
+  const password = document.getElementById("password").value;
 
-/* ------------------ CONNECT ------------------ */
-function connect() {
-  ws = new WebSocket(WS_URL);
-
-  ws.onopen = () => {
-    ws.send(JSON.stringify({ type: "REGISTER", id: me.id }));
-  };
-
-  ws.onmessage = async (e) => {
-    const msg = JSON.parse(e.data);
-
-    if (msg.type === "CONTACT_REQUEST") {
-      if (confirm("Kontaktförfrågan från " + msg.from)) {
-        ws.send(JSON.stringify({
-          type: "CONTACT_ACCEPT",
-          to: msg.from,
-          from: me.id
-        }));
-
-        addContact(msg.from);
-      }
-    }
-
-    if (msg.type === "CONTACT_ACCEPT") {
-      addContact(msg.from);
-      alert("Kontakt tillagd!");
-    }
-
-    if (msg.type === "DM") {
-      const text = await decrypt(msg.data, msg.from);
-      addMessage(msg.from, text);
-    }
-  };
-}
-
-connect();
-
-/* ------------------ CONTACTS ------------------ */
-function sendRequest() {
-  const id = document.getElementById("addId").value;
-
-  ws.send(JSON.stringify({
-    type: "CONTACT_REQUEST",
-    from: me.id,
-    to: id
-  }));
-}
-
-function addContact(id) {
-  if (!me.contacts[id]) {
-    me.contacts[id] = { messages: [] };
-    save();
-    renderContacts();
+  if (!username || !password) {
+    alert("Fyll i användarnamn och lösenord");
+    return;
   }
+
+  // enkel “login” (vi bygger riktig auth senare)
+  currentUser = username;
+
+  document.getElementById("login").style.display = "none";
+  document.getElementById("chat").style.display = "block";
 }
 
-/* ------------------ CHAT ------------------ */
-async function sendMessage(to, text) {
-  const enc = await encrypt(text, to);
+// ======================
+// GÅ MED I RUM
+// ======================
+async function joinRoom() {
+  const room = document.getElementById("room").value;
 
-  ws.send(JSON.stringify({
-    type: "DM",
-    to,
-    from: me.id,
-    data: enc
-  }));
+  if (!room) return;
 
-  addMessage(to, text, true);
+  currentRoom = room;
+
+  socket.emit("join_room", room);
+
+  // skapa ny sessionsnyckel för rummet
+  await createSessionKey();
+
+  addMessage("System", "Du gick med i rum: " + room);
 }
 
-function addMessage(id, text, own = false) {
-  me.contacts[id].messages.push({ text, own });
-  save();
-  renderChats();
-}
+// ======================
+// SKICKA MEDDELANDE
+// ======================
+async function sendMessage() {
+  const msgInput = document.getElementById("message");
+  const message = msgInput.value;
 
-/* ------------------ CRYPTO ------------------ */
-async function getKey(otherId) {
-  const raw = new TextEncoder().encode(me.id + otherId);
+  if (!message || !currentRoom) return;
 
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw", raw, "PBKDF2", false, ["deriveKey"]
-  );
+  // kryptera innan skick
+  const encrypted = await encrypt(message);
 
-  return crypto.subtle.deriveKey(
-    {
-      name: "PBKDF2",
-      salt: new TextEncoder().encode("libra"),
-      iterations: 100000,
-      hash: "SHA-256"
-    },
-    keyMaterial,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["encrypt", "decrypt"]
-  );
-}
-
-async function encrypt(text, to) {
-  const key = await getKey(to);
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-
-  const enc = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    key,
-    new TextEncoder().encode(text)
-  );
-
-  return {
-    iv: btoa(String.fromCharCode(...iv)),
-    data: btoa(String.fromCharCode(...new Uint8Array(enc)))
-  };
-}
-
-async function decrypt(payload, from) {
-  const key = await getKey(from);
-
-  const iv = new Uint8Array(atob(payload.iv).split("").map(c => c.charCodeAt(0)));
-  const data = new Uint8Array(atob(payload.data).split("").map(c => c.charCodeAt(0)));
-
-  const dec = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv },
-    key,
-    data
-  );
-
-  return new TextDecoder().decode(dec);
-}
-
-/* ------------------ UI ------------------ */
-function renderContacts() {
-  const el = document.getElementById("contactList");
-  el.innerHTML = "";
-
-  Object.keys(me.contacts).forEach(id => {
-    const div = document.createElement("div");
-    div.textContent = id;
-    div.onclick = () => openChat(id);
-    el.appendChild(div);
+  socket.emit("send_message", {
+    room: currentRoom,
+    message: encrypted,
+    sender: currentUser
   });
+
+  msgInput.value = "";
 }
 
-function openChat(id) {
-  const chat = me.contacts[id];
-  const el = document.getElementById("chatList");
+// ======================
+// TA EMOT MEDDELANDE
+// ======================
+socket.on("receive_message", async (data) => {
+  try {
+    const decrypted = await decrypt(data);
 
-  el.innerHTML = `
-    <h3>${id}</h3>
-    <div id="msgs"></div>
-    <input id="msgInput" class="input">
-    <button onclick="send()">Skicka</button>
-  `;
+    addMessage("Anonym", decrypted);
+  } catch (err) {
+    console.error("Kunde inte dekryptera:", err);
+  }
+});
 
-  window.currentChat = id;
+// ======================
+// UI HELPERS
+// ======================
+function addMessage(sender, text) {
+  const box = document.getElementById("chatBox");
 
-  chat.messages.forEach(m => {
-    addMsgUI(m.text, m.own);
-  });
-}
-
-function send() {
-  const input = document.getElementById("msgInput");
-  sendMessage(currentChat, input.value);
-  addMsgUI(input.value, true);
-  input.value = "";
-}
-
-function addMsgUI(text, own) {
-  const msgs = document.getElementById("msgs");
   const div = document.createElement("div");
+  div.className = "msg";
+  div.innerText = sender + ": " + text;
 
-  div.textContent = text;
-  div.style.textAlign = own ? "right" : "left";
-
-  msgs.appendChild(div);
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
 }
 
-/* ------------------ NAV ------------------ */
-function nav(id, el) {
-  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
-  document.getElementById(id).classList.add("active");
-
-  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-  el.classList.add("active");
-}
-
-/* ------------------ PROFILE ------------------ */
-document.getElementById("myId").textContent = me.id;
-
-function resetAccount() {
-  if (!confirm("Radera konto?")) return;
-
-  localStorage.clear();
-  location.reload();
-}
-
-/* ------------------ SAVE ------------------ */
-function save() {
-  localStorage.setItem("me", JSON.stringify(me));
-}
+// gör funktioner globala (för HTML knappar)
+window.login = login;
+window.joinRoom = joinRoom;
+window.sendMessage = sendMessage;
