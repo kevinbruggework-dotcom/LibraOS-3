@@ -27,8 +27,6 @@ io.on("connection", (socket) => {
   });
 
   socket.on("send_message", (data) => {
-    // data = { room, message, sender }
-
     io.to(data.room).emit("receive_message", data.message);
   });
 
@@ -45,4 +43,3 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log("Server running on port", PORT);
 });
-
